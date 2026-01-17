@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:intl/intl.dart'; // Date formatting package
+import 'package:intl/intl.dart';
 import 'package:sub_zero/models/subscription.dart';
+import 'package:sub_zero/services/notification_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -31,7 +32,6 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  // Function to pick a renewal date
   void pickDate() async {
     DateTime? picked = await showDatePicker(
       context: context,
@@ -47,11 +47,9 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // Smart Color Generator 🎨
   Color getColor(String name) {
     String lowerName = name.toLowerCase();
 
-    // VIP Brands
     if (lowerName.contains('netflix')) {
       return Colors.red;
     } else if (lowerName.contains('spotify')) {
@@ -64,7 +62,6 @@ class _HomeScreenState extends State<HomeScreen> {
       return Colors.redAccent;
     }
 
-    // Fallback based on name hash
     return Colors.primaries[name.hashCode % Colors.primaries.length];
   }
 
@@ -78,15 +75,12 @@ class _HomeScreenState extends State<HomeScreen> {
       body: ValueListenableBuilder(
         valueListenable: _myBox.listenable(),
         builder: (context, box, widget) {
-          
-          // Calculate total monthly cost
           double totalCost = box.values.cast<Subscription>().fold(
-            0, (sum, item) => sum + item.price
+              0, (sum, item) => sum + item.price
           );
 
           return Column(
             children: [
-              // Total Cost Section
               Container(
                 width: double.infinity,
                 margin: const EdgeInsets.all(20),
@@ -118,8 +112,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
               ),
-
-              // Subscription List
               Expanded(
                 child: box.isEmpty
                     ? const Center(child: Text("No subscriptions yet. Add one!"))
@@ -128,10 +120,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         itemBuilder: (context, index) {
                           final subscription = box.getAt(index) as Subscription;
                           
-                          // Format the date using intl package
                           String formattedDate = DateFormat('dd/MM/yyyy').format(subscription.renewalDate);
 
-                          // Calculate days left
                           int daysLeft = subscription.renewalDate
                               .difference(DateTime.now())
                               .inDays;
@@ -159,7 +149,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                 subscription.name,
                                 style: const TextStyle(fontWeight: FontWeight.bold),
                               ),
-                              // Updated Subtitle with Date
                               subtitle: Text("${subscription.price} \$  •  $formattedDate"),
                               trailing: Text(
                                 daysLeft <= 0 ? "Expired" : "$daysLeft days left",
@@ -217,7 +206,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 20),
                     ElevatedButton(
-                      onPressed: () {
+                      onPressed: () async {
                         if (nameController.text.isEmpty ||
                             priceController.text.isEmpty) return;
 
@@ -230,7 +219,13 @@ class _HomeScreenState extends State<HomeScreen> {
                           finalDate,
                         );
 
-                        _myBox.add(newSub);
+                        int id = await _myBox.add(newSub);
+
+                        await NotificationService().scheduleNotification(
+                          id,
+                          newSub.name,
+                          newSub.renewalDate,
+                        );
 
                         nameController.clear();
                         priceController.clear();
