@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:sub_zero/screens/home_screen.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:sub_zero/models/subscription.dart';
 
 void main() async{
   await Hive.initFlutter();
+  Hive.registerAdapter(SubscriptionAdapter());
   await Hive.openBox('subscriptionsBox');
   
   runApp(

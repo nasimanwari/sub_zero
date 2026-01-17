@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart'; // Import Hive
 import 'package:sub_zero/models/subscription.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -11,15 +12,10 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   late TextEditingController nameController;
   late TextEditingController priceController;
-
-  // ✨ YENİ: Seçilen tarihi tutacak değişken (Başlangıçta boş/null)
   DateTime? selectedDate;
 
-  List<Subscription> subscriptions = [
-    Subscription("Netflix", 9.99, DateTime(2026, 1, 19)),
-    Subscription("Spotify", 4.99, DateTime(2026, 2, 3)),
-    Subscription("Disney+", 19.99, DateTime(2026, 1, 25)),
-  ];
+  // Reference to our opened box
+  final _myBox = Hive.box('subscriptionsBox');
 
   @override
   void initState() {
@@ -35,7 +31,6 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  // ✨ YENİ: Tarih Seçme Fonksiyonu (Asenkron)
   void pickDate() async {
     DateTime? picked = await showDatePicker(
       context: context,
@@ -46,9 +41,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (picked != null) {
       setState(() {
-        selectedDate = picked; // Seçilen tarihi hafızaya al ve ekranı güncelle
+        selectedDate = picked;
       });
-      print("Tarih seçildi: $selectedDate");
     }
   }
 
@@ -59,63 +53,57 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text("Sub-Zero 🧊"),
         centerTitle: true,
       ),
-   body: ListView.builder(
-        itemCount: subscriptions.length,
-        itemBuilder: (context, index) {
-          final sub = subscriptions[index];
-          int daysLeft = sub.renewalDate.difference(DateTime.now()).inDays;
+      // 👇 MAGIC HAPPENS HERE: Watch the box for changes
+      body: ValueListenableBuilder(
+        valueListenable: _myBox.listenable(),
+        builder: (context, box, widget) {
+          
+          // If box is empty, show a nice message
+          if (box.isEmpty) {
+            return const Center(child: Text("No subscriptions yet. Add one! ➕"));
+          }
 
-          // ✨ YENİ: ListTile'ı Dismissible ile sarmaladık
-          return Dismissible(
-            // 1. KİMLİK KARTI: Her satıra benzersiz bir anahtar veriyoruz
-            key: UniqueKey(),
-            
-            // 2. ARKA PLAN: Kaydırırken arkada görünecek renk (Kırmızı ve Çöp Kutusu)
-            background: Container(
-              color: Colors.red,
-              alignment: Alignment.centerRight, // Çöp kutusu sağda dursun
-              padding: const EdgeInsets.only(right: 20),
-              child: const Icon(Icons.delete, color: Colors.white),
-            ),
-            
-            // 3. YÖN: Sadece sağdan sola (veya soldan sağa) kaydırılsın
-            direction: DismissDirection.endToStart,
+          // If box has data, show the list
+          return ListView.builder(
+            itemCount: box.length,
+            itemBuilder: (context, index) {
+              // Get data directly from the box
+              final subscription = box.getAt(index) as Subscription;
+              
+              int daysLeft = subscription.renewalDate.difference(DateTime.now()).inDays;
 
-            // 4. OLAY ANI: Kullanıcı kaydırıp bitirdiğinde ne olsun?
-            onDismissed: (direction) {
-              setState(() {
-                // Listeden veriyi siliyoruz
-                subscriptions.removeAt(index);
-              });
-
-              // Kullanıcıya "Sildin" diye küçük bir bilgi verelim (SnackBar)
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text("${sub.name} deleted")),
+              return Dismissible(
+                key: UniqueKey(),
+                background: Container(color: Colors.red),
+                onDismissed: (direction) {
+                  // DELETE from Database 🗑️
+                  box.deleteAt(index);
+                  
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("${subscription.name} deleted")),
+                  );
+                },
+                child: ListTile(
+                  leading: const Icon(Icons.subscriptions_outlined, color: Colors.blueAccent),
+                  title: Text(subscription.name),
+                  subtitle: Text("${subscription.price} \$"),
+                  trailing: Text(
+                    daysLeft <= 0 ? "Expired" : "$daysLeft days left",
+                    style: TextStyle(
+                      color: daysLeft <= 0 ? Colors.red : Colors.green,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
               );
             },
-
-            // Burası eski kodumuzun aynısı (Görünen kısım)
-            child: ListTile(
-              leading: const Icon(Icons.subscriptions_outlined, color: Colors.blueAccent),
-              title: Text(sub.name),
-              subtitle: Text("${sub.price} \$"),
-              trailing: Text(
-                daysLeft <= 0 ? "Expired" : "$daysLeft days left",
-                style: TextStyle(
-                  color: daysLeft <= 0 ? Colors.red : Colors.green,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
           );
         },
       ),
       floatingActionButton: FloatingActionButton(
         child: const Icon(Icons.add),
         onPressed: () {
-          // Her açılışta tarihi sıfırlayalım ki önceki seçim kalmasın
-          selectedDate = null; 
-          
+          selectedDate = null;
           showModalBottomSheet(
             context: context,
             builder: (BuildContext context) {
@@ -135,23 +123,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       keyboardType: TextInputType.number,
                     ),
                     const SizedBox(height: 20),
-
-                    // 🛠️ EKSİK PARÇA BURADA! 🛠️
-                    // Kullanıcı buraya tıkladığında pickDate() çalışmalı.
                     ElevatedButton(
                       onPressed: pickDate,
-                      // child artık sadece Text değil, bir Row (Satır) oldu 👇
                       child: Row(
-                        mainAxisSize: MainAxisSize.min, // Düğme ekranı kaplamasın, yazı kadar olsun
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          // 1. İkonumuz burada 🗓️
-                          const Icon(Icons.calendar_month),
-                          
-                          // İkon ile yazı arasına biraz boşluk
-                          const SizedBox(width: 8), 
-                          
-                          // 2. Yazımız burada
-                          Text(
+                           const Icon(Icons.calendar_month),
+                           const SizedBox(width: 8),
+                           Text(
                             selectedDate == null
                                 ? "Select Renewal Date"
                                 : "Selected: ${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}",
@@ -159,26 +138,27 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                     ),
-                    
                     const SizedBox(height: 20),
                     ElevatedButton(
                       onPressed: () {
                         if (nameController.text.isEmpty || priceController.text.isEmpty) return;
 
-                        // Tarih seçilmediyse varsayılan olarak 30 gün sonrasını verelim
                         DateTime finalDate = selectedDate ?? DateTime.now().add(const Duration(days: 30));
 
-                        setState(() {
-                          Subscription newSub = Subscription(
-                            nameController.text,
-                            double.parse(priceController.text),
-                            finalDate, // Artık seçilen tarihi kullanıyoruz
-                          );
-                          subscriptions.add(newSub);
-                          nameController.clear();
-                          priceController.clear();
-                          Navigator.pop(context);
-                        });
+                        // 1. Create Object
+                        Subscription newSub = Subscription(
+                          nameController.text,
+                          double.parse(priceController.text),
+                          finalDate,
+                        );
+
+                        // 2. ADD TO DATABASE directly 💾
+                        _myBox.add(newSub); 
+
+                        // 3. Clear & Close
+                        nameController.clear();
+                        priceController.clear();
+                        Navigator.pop(context);
                       },
                       child: const Text("Add Subscription"),
                     )
