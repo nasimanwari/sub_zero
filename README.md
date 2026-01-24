@@ -6,7 +6,7 @@
   <img src="screenshots/mockup.png" alt="Sub-Zero App Showcase" width="100%">
 </p>
 
-## ✨ Key Features
+## Key Features
 
 * **Smart Recognition:** Automatically detects brand colors and icons (Netflix, Spotify, Xbox, etc.) as you type.
 * **Persona Engine:** Analyzes your spending data to assign you a character (e.g., *The Binge Watcher*, *The Audiophile*, *The Tycoon*).
@@ -35,7 +35,7 @@
 
 1.  **Clone the repo:**
     ```bash
-    git clone [https://github.com/YOUR_USERNAME/sub-zero.git](https://github.com/YOUR_USERNAME/sub-zero.git)
+    git clone [https://github.com/nasimanwari/sub_zero]
     ```
 2.  **Install dependencies:**
     ```bash
